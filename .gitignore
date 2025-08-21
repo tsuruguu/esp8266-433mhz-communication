@@ -32,6 +32,33 @@
 *.a
 *.lib
 
+# Compiled object files, libraries, etc.
+*.o
+*.a
+*.so
+
+# Arduino build folder
+build/
+*.elf
+*.bin
+*.hex
+*.eep
+*.out
+*.d
+
+# Arduino IDE specific
+.arduino*
+*.ino.cpp
+*.ino.cpp.d
+
+# VSCode / PlatformIO
+.vscode/
+.pio/
+
+# Mac / Windows system files
+.DS_Store
+Thumbs.db
+
 # Executables
 *.exe
 *.out
