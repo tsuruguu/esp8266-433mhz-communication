@@ -1,134 +1,104 @@
-# ESP8266 433 MHz Communication Demo
+# esp8266-433mhz-communication
 
-## 📌 Project description
-This project demonstrates simple wireless communication between two **ESP8266 (NodeMCU)** boards using inexpensive **433 MHz RF modules**.  
-One ESP8266 acts as a **transmitter (TX)**, the other as a **receiver (RX)**.  
-The **RadioHead (RH_ASK)** library is used to implement **ASK/OOK modulation**.
+This project shows how to use **ESP8266** with **433 MHz ASK/OOK modules** (FS1000A transmitter + XY-MK-5V receiver) to build a simple wireless link using the [RadioHead](http://www.airspayce.com/mikem/arduino/RadioHead/) library (`RH_ASK`).
 
-Educational project – shows how to send text data in the 433 MHz ISM band.
+The original examples used fixed strings (`"Hello World"`).  
+This repository has now been **extended**:  
 
----
+👉 The **transmitter** can read data from the UART (USB-Serial connection to PC) and immediately send those bytes over 433 MHz.  
+👉 The **receiver** just prints whatever it receives back to its own UART.  
 
-## 🛠️ Hardware used
-- 2× **ESP8266 NodeMCU v3 (ESP-12E)**  
-- 1× **433 MHz Transmitter FS1000A**  
-- 1× **433 MHz Receiver MX-RM-5V**  
-- 2× antennas – simple wire **~17 cm** (quarter-wave for 433 MHz)  
-- Jumper wires, computer with Arduino IDE  
-
----
-
-## 🔌 Wiring
-
-### Transmitter (FS1000A)
-- **DATA → D2 (GPIO4)** ESP8266  
-- **VCC → VIN (5 V from USB)**  
-- **GND → GND**  
-- **ANT → ~17 cm wire**
-
-### Receiver (MX-RM-5V)
-- **DATA → D2 (GPIO4)** ESP8266  
-- **VCC → VIN (5 V from USB)**  
-- **GND → GND**  
-- ⚠️ Note: if the receiver outputs 5 V on DATA, use a voltage divider to step down to **3.3 V max for ESP8266!**
-
----
-
-## 💻 Software setup
-
-### 1. Arduino IDE
-- Install **ESP8266 board support**:  
-  `File → Preferences → Additional Boards URLs`  
-  ```
-  http://arduino.esp8266.com/stable/package_esp8266com_index.json
-  ```
-  Then go to **Tools → Board → Board Manager** and install **ESP8266 by ESP8266 Community**.
-
-- Select the board:  
-  `Tools → Board → NodeMCU 1.0 (ESP-12E Module)`
-
-- Recommended settings:  
-  - **Upload Speed:** 115200  
-  - **CPU Freq:** 80 MHz  
-  - **Flash Size:** 4M (1M SPIFFS)  
-
-### 2. Library
-Install **RadioHead** (by Mike McCauley) via Arduino Library Manager.
-
----
-
-## 📡 Example code
-
-### Transmitter (TX)
-```cpp
-#include <RH_ASK.h>
-#include <SPI.h>
-
-RH_ASK driver(2000, -1, 4, -1, false); // 2000 bps, TX=GPIO4 (D2)
-
-void setup() {
-  Serial.begin(115200);
-  if (!driver.init()) {
-    Serial.println("RH_ASK init FAILED");
-    while (1);
-  }
-  Serial.println("TX ready");
-}
-
-void loop() {
-  const char *msg = "HELLO_433";
-  driver.send((uint8_t*)msg, strlen(msg));
-  driver.waitPacketSent();
-  Serial.println("Sent: HELLO_433");
-  delay(1000);
-}
+This makes the ESP8266 act as a **transparent wireless bridge**:  
 ```
-
-### Receiver (RX)
-```cpp
-#include <RH_ASK.h>
-#include <SPI.h>
-
-RH_ASK driver(2000, 4, -1, -1, false); // 2000 bps, RX=GPIO4 (D2)
-
-void setup() {
-  Serial.begin(115200);
-  if (!driver.init()) {
-    Serial.println("RH_ASK init FAILED");
-    while (1);
-  }
-  Serial.println("RX ready");
-}
-
-void loop() {
-  uint8_t buf[50];
-  uint8_t buflen = sizeof(buf);
-  if (driver.recv(buf, &buflen)) {
-    buf[buflen] = 0;
-    Serial.print("Received: ");
-    Serial.println((char*)buf);
-  }
-}
+PC → UART → ESP8266 + TX module → 433 MHz → ESP8266 + RX module → UART → PC
 ```
 
 ---
 
-## 🧪 Testing
-1. Connect both ESP8266 boards to your computer (different USB ports).  
-2. Upload the TX code to one ESP and the RX code to the other.  
-3. Open **Serial Monitor** (115200 baud) on both ports.  
-4. On the transmitter you should see:  
-   ```
-   TX ready
-   Sent: HELLO_433
-   ```
-5. On the receiver you should see:  
-   ```
-   RX ready
-   Received: HELLO_433
-   ```
+## Hardware
+
+- **ESP8266 development board** (e.g. NodeMCU, Wemos D1 mini)  
+- **433 MHz ASK transmitter** (FS1000A)  
+- **433 MHz ASK receiver** (XY-MK-5V)  
+
+### Connections
+
+#### Transmitter
+- RF data pin → **GPIO4 (D2)**  
+- VCC → 5 V  
+- GND → GND  
+
+#### Receiver
+- RF data pin → default `RH_ASK` RX pin (GPIO11 on ESP8266 internally, no need to change)  
+- VCC → 5 V  
+- GND → GND  
+
+> ⚠️ Some modules claim 5 V supply but work more reliably with **3.3 V** when used with ESP8266. Check your specific modules.  
 
 ---
 
-## 📜 License
-This project is released under the **MIT License** – you are free to use, copy, and modify the code with attribution to the original author.
+## Software
+
+### Libraries
+- [RadioHead](http://www.airspayce.com/mikem/arduino/RadioHead/)  
+
+Install it via Arduino Library Manager or download directly.
+
+### Transmitter (`transmitter.ino`)
+
+- Opens UART at **115200 bps**.  
+- Collects bytes arriving from PC into a buffer.  
+- Sends a packet over 433 MHz when:  
+  - a newline (`\n` or `\r`) arrives, **or**  
+  - a **gap timeout** (default 30 ms without new data) expires, **or**  
+  - the buffer is full (≈ 50 bytes).  
+- After sending, the buffer is cleared.  
+- Packets contain **exactly** the bytes received — no extra terminators are added.  
+
+### Receiver (`receiver.ino`)
+
+- Uses `driver.recv(buf, &len)` to get packets from the air.  
+- Prints received data to Serial (UART 115200).  
+- No changes needed — works as before.  
+
+---
+
+## Usage
+
+1. Connect ESP8266 boards to your PC.  
+2. Upload `transmitter.ino` to the board with TX module.  
+3. Upload `receiver.ino` to the board with RX module.  
+4. Open **two Serial Monitors** at 115200 bps.  
+   - One connected to the transmitter board (input).  
+   - One connected to the receiver board (output).  
+5. Type text into the transmitter’s Serial Monitor or send data programmatically from PC.  
+   - Data is sent over 433 MHz.  
+   - Receiver board prints the same data to its Serial Monitor.  
+
+---
+
+## Example
+
+- On TX Serial Monitor you type:  
+  ```
+  Hello 433!
+  ```
+- The RX Serial Monitor shows:  
+  ```
+  Received: Hello 433!
+  ```
+
+---
+
+## Notes
+
+- Maximum packet length is defined by `RH_ASK_MAX_MESSAGE_LEN` (~50 bytes).  
+- Longer data is automatically split into multiple packets.  
+- Timing-based packetization means if you type very slowly in Serial Monitor, you may see single letters arriving as separate packets (use Enter or increase timeout if needed).  
+- For more robust communication, you can add a simple protocol (e.g. `LEN + CRC`).  
+
+---
+
+## License
+
+MIT
